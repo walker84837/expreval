@@ -1,15 +1,18 @@
-CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -Wpedantic
+operatingsystem := $(shell go env GOOS)
 
-SRC = main.cpp lexer.hpp parser.hpp tokenizer.hpp
-TARGET = math_expression_evaluator
+.PHONY: all clean release debug
 
-.PHONY: all clean
+all:
+	@echo "Building for '$(operatingsystem)'..."
+	go build -ldflags="-s -w" -gcflags="-N -l" ./...
 
-all: $(TARGET)
+release: all
+	@echo "Building release version..."
+	CGO_ENABLED=0 go build -ldflags="-s -w" -gcflags="-trimpath=$(PWD)" ./...
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+debug:
+	@echo "Building debug version..."
+	go build -ldflags="-s -w" -gcflags="" ./...
 
 clean:
-	@rm -f $(TARGET)
+	@rm -rf ./*.a *.o core *.log

@@ -1,19 +1,49 @@
-# math-evaluator-cpp
+# expreval: expression evaluator
 
-This is a simple math expression evaluator written in C++ that can parse and evaluate basic arithmetic expressions. It uses a lexer, parser, and tokenizer to break down the input expression and calculate the result.
+A simple command-line tool for evaluating mathematical expressions.
+
+This project provides a simple command-line tool for evaluating mathematical expressions. It includes a lexer and parser to analyze and calculate mathematical operations.
+
+Development is active, and new features are being added. Feel free to contribute or suggest improvements!
+
+## Table of Contents
+
+- [Usage](#usage)
+- [Support](#support)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Usage
+
+Ensure you have Go installed. Clone the repository and run the following command:
+
+```bash
+go run main.go
+```
+
+Enter mathematical expressions when prompted, and the tool will evaluate and display the result. To exit the program, type `quit`, `exit` or `q`.
+
+## Roadmap
+
+- [] Support for more complex mathematical functions.
 
 ## Contributing
 
-Contributions are always welcome! If you'd like to contribute to this project, follow these steps:
+Contributions are welcome! Feel free to open issues or submit pull requests. Before contributing, please follow these guidelines:
 
-1. Clone the repository: `git clone https://github.com/walker84837/math-expression-evaluator.git`
-2. Navigate to the project directory: `cd math-expression-evaluator`
-3. Make your changes or improvements.
-4. Commit your changes: `git commit -m "Add your commit message here"`
-5. Push to your forked repository: `git push origin master`
-6. Open a pull request on GitHub.
+- Follow the [code of conduct](CODE_OF_CONDUCT.md).
+- Keep a consistent coding style. To ensure your coding style remains the same, format your code with:
+  ``` console
+  $ go fmt path/to/source_code
+  ```
+- Use the stable version of Go.
+- If you have to use an external package, please prefer lightweight ones (e.g., `fasthttp` over `net/http`).
+- Prefer using the standard library over reinventing the wheel.
+
+Please stick to Go's official style guidelines while submitting patches.
+For support, please [open an issue](https://github.com/walker84837/expreval/issues).
 
 ## License
 
-This project is licensed under the GNU General Public License, version 3.0.
-Please review the [LICENSE](LICENSE.md) file for more details, and you can get a full copy [here](https://www.gnu.org/licenses/gpl-3.0.html).
+This project is licensed under the [BSD-3-Clause License](LICENSE.md).
