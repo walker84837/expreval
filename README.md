@@ -26,7 +26,8 @@ Enter mathematical expressions when prompted, and the tool will evaluate and dis
 
 ## Roadmap
 
-- [] Support for more complex mathematical functions.
+- [ ] Support for more complex mathematical functions, such as powers, and square roots.
+- [ ] Add configuration (TOML).
 
 ## Contributing
 
