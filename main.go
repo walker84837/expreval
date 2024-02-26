@@ -6,14 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 	"strconv"
+	"strings"
 )
-
-// isWholeNumber checks if a given number is whole or not.
-func isWholeNumber(x float64) bool {
-	return x == math.Floor(x)
-}
 
 // clearScreen clears the terminal screen.
 func clearScreen() {
@@ -250,7 +245,7 @@ func main() {
 			continue
 		}
 
-		if !isWholeNumber(result) {
+		if result != math.Floor(result) {
 			fmt.Printf("%.10f\n", result)
 		} else {
 			fmt.Println(result)
