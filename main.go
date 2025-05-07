@@ -268,7 +268,7 @@ var commands = map[string]cmdFunc{
 func main() {
 	fmt.Println("Advanced Math REPL (flexible commands)")
 	fmt.Println("Available:", keys(commands))
-	fmt.Println("Type e.g. gcm%fe 12 18 30  or  fact%p 84 90")
+	fmt.Printf("Type e.g. gcm%%fe 12 18 30  or  fact%%p 84 90\n")
 	fmt.Println("Or enter any expression.  exit/quit/q to leave.")
 
 	scanner := bufio.NewScanner(os.Stdin)
