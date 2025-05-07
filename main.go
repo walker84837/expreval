@@ -1,259 +1,345 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
-	"runtime"
-	"strings"
 	"strconv"
+	"strings"
 )
 
-// isWholeNumber checks if a given number is whole or not.
-func isWholeNumber(x float64) bool {
-	return x == math.Floor(x)
-}
-
-// clearScreen clears the terminal screen.
-func clearScreen() {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", "cls")
-	} else {
-		cmd = exec.Command("clear")
+func gcd(a, b int) int {
+	if b == 0 {
+		if a < 0 {
+			return -a
+		}
+		return a
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Run()
+	return gcd(b, a%b)
 }
 
-// TokenType represents the type of a token.
-type TokenType int
+func lcm(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	return a / gcd(a, b) * b
+}
+
+func factorize(n int) []int {
+	if n < 0 {
+		n = -n
+	}
+	var facs []int
+	for n%2 == 0 {
+		facs = append(facs, 2)
+		n /= 2
+	}
+	for p := 3; p*p <= n; p += 2 {
+		for n%p == 0 {
+			facs = append(facs, p)
+			n /= p
+		}
+	}
+	if n > 1 {
+		facs = append(facs, n)
+	}
+	return facs
+}
+
+func printFactors(facs []int, primeOnly, exponents bool) {
+	if primeOnly {
+		seen := make(map[int]bool)
+		var uniq []int
+		for _, p := range facs {
+			if !seen[p] {
+				seen[p] = true
+				uniq = append(uniq, p)
+			}
+		}
+		facs = uniq
+	}
+	if exponents {
+		counts := make(map[int]int)
+		for _, p := range facs {
+			counts[p]++
+		}
+		first := true
+		for p, cnt := range counts {
+			if !first {
+				fmt.Print(" × ")
+			}
+			if cnt > 1 {
+				fmt.Printf("%d^%d", p, cnt)
+			} else {
+				fmt.Printf("%d", p)
+			}
+			first = false
+		}
+		fmt.Println()
+		return
+	}
+	for i, p := range facs {
+		if i > 0 {
+			fmt.Print(" × ")
+		}
+		fmt.Print(p)
+	}
+	fmt.Println()
+}
+
+type tokenType int
 
 const (
-	INTEGER TokenType = iota
-	OPERATOR
-	LEFT_PAREN
-	RIGHT_PAREN
-	FUNCTION
+	NUMBER tokenType = iota
+	OP
+	LPAREN
+	RPAREN
 )
 
-// Token represents a token in the lexer.
-type Token struct {
-	Type  TokenType
-	Value string
+type token struct {
+	typ   tokenType
+	value string
 }
 
-// Lexer struct represents the lexer.
-type Lexer struct{}
+var prec = map[string]int{"+": 1, "-": 1, "*": 2, "/": 2, "^": 3}
 
-// lex performs lexical analysis on the given tokens.
-func (l *Lexer) lex(tokens []string) ([]Token, error) {
-	var lexedTokens []Token
-	operatorType := map[string]TokenType{
-		"+": OPERATOR,
-		"-": OPERATOR,
-		"*": OPERATOR,
-		"/": OPERATOR,
-		"^": OPERATOR,
-		"%": OPERATOR,
-	}
-
-	for _, token := range tokens {
-		switch token {
-		case "(":
-			lexedTokens = append(lexedTokens, Token{Type: LEFT_PAREN, Value: token})
-		case ")":
-			lexedTokens = append(lexedTokens, Token{Type: RIGHT_PAREN, Value: token})
+func tokenize(expr string) []string {
+	var toks []string
+	var buf strings.Builder
+	ops := "+-*/^()%"
+	for _, r := range expr {
+		switch {
+		case r == ' ':
+			continue
+		case strings.ContainsRune(ops, r):
+			if buf.Len() > 0 {
+				toks = append(toks, buf.String())
+				buf.Reset()
+			}
+			toks = append(toks, string(r))
 		default:
-			if opType, ok := operatorType[token]; ok {
-				lexedTokens = append(lexedTokens, Token{Type: opType, Value: token})
-			} else if _, err := strconv.ParseFloat(token, 64); err == nil {
-				lexedTokens = append(lexedTokens, Token{Type: INTEGER, Value: token})
+			buf.WriteRune(r)
+		}
+	}
+	if buf.Len() > 0 {
+		toks = append(toks, buf.String())
+	}
+	return toks
+}
+
+func lexRaw(strs []string) ([]token, error) {
+	var out []token
+	for _, s := range strs {
+		switch s {
+		case "(":
+			out = append(out, token{LPAREN, s})
+		case ")":
+			out = append(out, token{RPAREN, s})
+		case "+", "-", "*", "/", "^":
+			out = append(out, token{OP, s})
+		default:
+			if _, err := strconv.ParseFloat(s, 64); err == nil {
+				out = append(out, token{NUMBER, s})
 			} else {
-				return nil, fmt.Errorf("Invalid token: %s", token)
+				return nil, fmt.Errorf("invalid token %q", s)
 			}
 		}
 	}
-
-	return lexedTokens, nil
+	return out, nil
 }
 
-// evaluate performs evaluation of operators and numbers.
-func evaluate(operators *Stack, numbers *Stack) error {
-	op := operators.Pop().(Token)
+func evalExpr(tokens []token) (float64, error) {
+	var vals []float64
+	var ops []token
 
-	value2 := numbers.Pop().(float64)
-	value1 := numbers.Pop().(float64)
-
-	switch op.Value {
-	case "+":
-		numbers.Push(value1 + value2)
-	case "-":
-		numbers.Push(value1 - value2)
-	case "*":
-		numbers.Push(value1 * value2)
-	case "/":
-		if value2 == 0 {
-			return fmt.Errorf("Division by zero")
+	applyOp := func() error {
+		if len(vals) < 2 {
+			return fmt.Errorf("not enough operands")
 		}
-		numbers.Push(value1 / value2)
-	case "^":
-		numbers.Push(math.Pow(value1, value2))
-	case "%":
-		numbers.Push(math.Mod(value1, value2))
+		op := ops[len(ops)-1]
+		ops = ops[:len(ops)-1]
+		b := vals[len(vals)-1]
+		a := vals[len(vals)-2]
+		vals = vals[:len(vals)-2]
+
+		var res float64
+		switch op.value {
+		case "+":
+			res = a + b
+		case "-":
+			res = a - b
+		case "*":
+			res = a * b
+		case "/":
+			if b == 0 {
+				return fmt.Errorf("division by zero")
+			}
+			res = a / b
+		case "^":
+			res = math.Pow(a, b)
+		}
+		vals = append(vals, res)
+		return nil
 	}
 
-	return nil
-}
-
-// parse parses the tokens and performs the calculation.
-func parse(tokens []Token) (float64, error) {
-	var numbers Stack
-	var operators Stack
-	precedence := map[string]int{
-		"+": 1, "-": 1, "%": 1, "^": 3, "*": 2, "/": 2,
-	}
-
-	for _, token := range tokens {
-		switch token.Type {
-		case INTEGER:
-			numbers.Push(stringToF64(token.Value))
-		case OPERATOR:
-			for !operators.IsEmpty() && operators.Top().(Token).Type == OPERATOR &&
-				precedence[operators.Top().(Token).Value] >= precedence[token.Value] {
-				if err := evaluate(&operators, &numbers); err != nil {
+	for _, tok := range tokens {
+		switch tok.typ {
+		case NUMBER:
+			v, _ := strconv.ParseFloat(tok.value, 64)
+			vals = append(vals, v)
+		case OP:
+			for len(ops) > 0 && ops[len(ops)-1].typ == OP {
+				top := ops[len(ops)-1].value
+				if prec[top] > prec[tok.value] ||
+					(prec[top] == prec[tok.value] && tok.value != "^") {
+					if err := applyOp(); err != nil {
+						return 0, err
+					}
+					continue
+				}
+				break
+			}
+			ops = append(ops, tok)
+		case LPAREN:
+			ops = append(ops, tok)
+		case RPAREN:
+			for len(ops) > 0 && ops[len(ops)-1].typ != LPAREN {
+				if err := applyOp(); err != nil {
 					return 0, err
 				}
 			}
-			operators.Push(token)
-		case LEFT_PAREN:
-			operators.Push(token)
-		case RIGHT_PAREN:
-			for operators.Top().(Token).Type != LEFT_PAREN {
-				if err := evaluate(&operators, &numbers); err != nil {
-					return 0, err
-				}
+			if len(ops) == 0 {
+				return 0, fmt.Errorf("mismatched parens")
 			}
-			operators.Pop()
+			// pop "("
+			ops = ops[:len(ops)-1]
 		}
 	}
-
-	for !operators.IsEmpty() {
-		if err := evaluate(&operators, &numbers); err != nil {
+	for len(ops) > 0 {
+		if err := applyOp(); err != nil {
 			return 0, err
 		}
 	}
-
-	return numbers.Top().(float64), nil
-}
-
-// Stack represents a simple stack data structure.
-type Stack []interface{}
-
-// Push adds an element to the top of the stack.
-func (s *Stack) Push(item interface{}) {
-	*s = append(*s, item)
-}
-
-// Pop removes and returns the element from the top of the stack.
-func (s *Stack) Pop() interface{} {
-	if len(*s) == 0 {
-		return nil
+	if len(vals) != 1 {
+		return 0, fmt.Errorf("invalid expr")
 	}
-	item := (*s)[len(*s)-1]
-	*s = (*s)[:len(*s)-1]
-	return item
+	return vals[0], nil
 }
 
-// Top returns the element from the top of the stack without removing it.
-func (s *Stack) Top() interface{} {
-	if len(*s) == 0 {
-		return nil
-	}
-	return (*s)[len(*s)-1]
-}
+type cmdFunc func(nums []int, flags string)
 
-// IsEmpty checks if the stack is empty.
-func (s *Stack) IsEmpty() bool {
-	return len(*s) == 0
-}
-
-// stringToF64 parses a string to a float64.
-func stringToF64(s string) float64 {
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		fmt.Printf("Failed to parse integer: %s\n", s)
-		return 0.0
-	}
-	return f
-}
-
-// tokenize breaks the expression into tokens.
-func tokenize(expression string) []string {
-	var tokens []string
-	ops := "+-*/()^%"
-	var builder strings.Builder
-
-	for _, c := range expression {
-		if c == ' ' {
-			continue
-		} else if strings.ContainsRune(ops, c) {
-			if builder.Len() > 0 {
-				tokens = append(tokens, builder.String())
-				builder.Reset()
-			}
-
-			tokens = append(tokens, string(c))
-		} else {
-			builder.WriteRune(c)
+var commands = map[string]cmdFunc{
+	"gcm": func(nums []int, flags string) {
+		res := nums[0]
+		for _, v := range nums[1:] {
+			res = gcd(res, v)
 		}
-	}
-
-	if builder.Len() > 0 {
-		tokens = append(tokens, builder.String())
-	}
-
-	return tokens
+		if strings.Contains(flags, "f") {
+			facs := factorize(res)
+			fmt.Printf("gcm = %d → ", res)
+			printFactors(facs, strings.Contains(flags, "p"), strings.Contains(flags, "e"))
+		} else {
+			fmt.Println(res)
+		}
+	},
+	"lcm": func(nums []int, flags string) {
+		res := nums[0]
+		for _, v := range nums[1:] {
+			res = lcm(res, v)
+		}
+		if strings.Contains(flags, "f") {
+			facs := factorize(res)
+			fmt.Printf("lcm = %d → ", res)
+			printFactors(facs, strings.Contains(flags, "p"), strings.Contains(flags, "e"))
+		} else {
+			fmt.Println(res)
+		}
+	},
+	"fact": func(nums []int, flags string) {
+		for _, v := range nums {
+			facs := factorize(v)
+			fmt.Printf("%d → ", v)
+			printFactors(facs, strings.Contains(flags, "p"), strings.Contains(flags, "e"))
+		}
+	},
 }
 
 func main() {
-	clearScreen()
+	fmt.Println("Advanced Math REPL (flexible commands)")
+	fmt.Println("Available:", keys(commands))
+	fmt.Println("Type e.g. gcm%fe 12 18 30  or  fact%p 84 90")
+	fmt.Println("Or enter any expression.  exit/quit/q to leave.")
 
-	fmt.Println("Math Expression Evaluator")
-	fmt.Println("Enter quit or exit or q to close the program")
-
-	var expression string
-	lexer := Lexer{}
-
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print(">> ")
-		fmt.Scanln(&expression)
-
-		checkInput := strings.ToLower(expression)
-
-		if checkInput == "exit" || checkInput == "quit" || checkInput == "q" {
+		if !scanner.Scan() {
 			break
 		}
-
-		tokens := tokenize(expression)
-
-		lexedTokens, err := lexer.lex(tokens)
-		if err != nil {
-			fmt.Println("Error:", err)
+		line := strings.TrimSpace(scanner.Text())
+		lc := strings.ToLower(line)
+		if lc == "exit" || lc == "quit" || lc == "q" {
+			break
+		}
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
 			continue
 		}
 
-		result, err := parse(lexedTokens)
-		if err != nil {
-			fmt.Println("Error:", err)
+		cmdToken := parts[0]
+		if idx := strings.Index(cmdToken, "%"); idx != -1 {
+			cmdToken, _ = cmdToken[:idx], cmdToken[idx+1:]
+		}
+
+		// strip flags off for lookup
+		base, flags := cmdToken, ""
+		if p := strings.Index(parts[0], "%"); p >= 0 {
+			base = parts[0][:p]
+			flags = parts[0][p+1:]
+		}
+
+		if fn, ok := commands[base]; ok {
+			// parse ints
+			var nums []int
+			for _, s := range parts[1:] {
+				if v, err := strconv.Atoi(s); err == nil {
+					nums = append(nums, v)
+				}
+			}
+			if len(nums) == 0 {
+				fmt.Println("need at least one integer")
+				continue
+			}
+			fn(nums, flags)
 			continue
 		}
 
-		if !isWholeNumber(result) {
-			fmt.Printf("%.10f\n", result)
+		// fallback: arithmetic expression
+		toks := tokenize(line)
+		lexed, err := lexRaw(toks)
+		if err != nil {
+			fmt.Println("Lex error:", err)
+			continue
+		}
+		res, err := evalExpr(lexed)
+		if err != nil {
+			fmt.Println("Eval error:", err)
+			continue
+		}
+		if math.Floor(res) == res {
+			fmt.Printf("%.0f\n", res)
 		} else {
-			fmt.Println(result)
+			fmt.Printf("%.10f\n", res)
 		}
 	}
+}
+
+// helper to list available commands
+func keys(m map[string]cmdFunc) []string {
+	var ks []string
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
 }
